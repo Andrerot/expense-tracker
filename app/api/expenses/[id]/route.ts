@@ -3,11 +3,11 @@ import { deleteExpense } from "@/lib/googleSheets";
 
 export const runtime = "nodejs";
 
-type DeleteExpenseContext = {
-  params: Promise<{ id: string }> | { id: string };
-};
+//type DeleteExpenseContext = {
+//  params: Promise<{ id: string }> | { id: string };
+//};
 
-export async function DELETE(_request: Request, context: DeleteExpenseContext) {
+export async function DELETE(_request: Request, context: { params:  Promise<{ id: string }> | { id: string } }) {
   const params = await context.params;
   const id = params.id?.trim();
 

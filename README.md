@@ -63,6 +63,19 @@ Con credenziali Google configurate, l'app verifica automaticamente il file, crea
 Se `GOOGLE_SHEETS_SPREADSHEET_ID` manca o punta a un file non trovato, l'app crea un nuovo Google Sheet e scrive nei log lo `spreadsheetId` da copiare nelle variabili ambiente per renderlo stabile.
 Se imposti `GOOGLE_SHEETS_SHARE_WITH_EMAIL`, l'app prova anche a condividere il nuovo file con quella email come editor; per questa opzione serve abilitare anche la Google Drive API nel progetto Google Cloud.
 
+### Diagnostica Google Sheets su Vercel
+
+Se l'app mostra un errore Google Sheets, apri Vercel e controlla `Project > Logs`.
+Le chiamate Google fallite vengono loggate come `Errore Google API Spendino` con azione, status HTTP e corpo risposta Google.
+
+Indicazioni rapide:
+
+- `403 SERVICE_DISABLED`: abilita Google Sheets API nel progetto Google Cloud.
+- `403 insufficientPermissions`: controlla scope, service account e condivisione del file.
+- `400 invalid_grant`: verifica `GOOGLE_SHEETS_CLIENT_EMAIL` e `GOOGLE_SHEETS_PRIVATE_KEY`, soprattutto gli `\n` nella private key.
+- `404`: lo spreadsheet id non esiste o il service account non puo leggerlo; se manca lo id, l'app prova a creare un nuovo file.
+- errore su `condivisione file`: abilita Google Drive API o rimuovi `GOOGLE_SHEETS_SHARE_WITH_EMAIL`.
+
 ## Impostazioni
 
 Il tab `Impost.` permette di:

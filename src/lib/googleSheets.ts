@@ -119,6 +119,7 @@ export async function appendExpense(expense: Expense): Promise<void> {
   );
 
   if (!response.ok) {
+    await logGoogleApiError("salvataggio spesa", response);
     throw new Error("Non sono riuscito a salvare la spesa su Google Sheets");
   }
 }
@@ -143,6 +144,7 @@ export async function listExpenses(limit = 50): Promise<Expense[]> {
   );
 
   if (!response.ok) {
+    await logGoogleApiError("lettura spese", response);
     throw new Error("Non sono riuscito a leggere le spese da Google Sheets");
   }
 
@@ -196,6 +198,7 @@ export async function deleteExpense(id: string): Promise<boolean> {
   );
 
   if (!response.ok) {
+    await logGoogleApiError("cancellazione spesa", response);
     throw new Error("Non sono riuscito a cancellare la spesa da Google Sheets");
   }
 
@@ -247,6 +250,7 @@ async function resolveSpreadsheet(
     }
 
     if (response.status !== 404) {
+      await logGoogleApiError("lettura file configurato", response);
       throw new Error("Non sono riuscito a leggere il file Google Sheets configurato");
     }
   }
@@ -279,6 +283,7 @@ async function createSpreadsheet(
   });
 
   if (!response.ok) {
+    await logGoogleApiError("creazione file", response);
     throw new Error("Non sono riuscito a creare il file Google Sheets");
   }
 
@@ -323,6 +328,7 @@ async function shareCreatedSpreadsheet(spreadsheetId: string, token: string): Pr
   });
 
   if (!response.ok) {
+    await logGoogleApiError("condivisione file", response);
     console.warn(
       `Spendino ha creato il Google Sheet ${spreadsheetId}, ma non e riuscito a condividerlo con ${shareWithEmail}. Verifica che la Google Drive API sia abilitata.`,
     );
@@ -340,6 +346,7 @@ async function ensureSheetExists(config: Required<GoogleSheetsConfig>, token: st
   );
 
   if (!response.ok) {
+    await logGoogleApiError("verifica tab", response);
     throw new Error("Non sono riuscito a verificare le tab del file Google Sheets");
   }
 
@@ -379,6 +386,7 @@ async function ensureSheetExists(config: Required<GoogleSheetsConfig>, token: st
   );
 
   if (!createResponse.ok) {
+    await logGoogleApiError("creazione tab", createResponse);
     throw new Error("Non sono riuscito a creare la tab Google Sheets per Spendino");
   }
 }
@@ -400,6 +408,7 @@ async function ensureHeaderRow(config: Required<GoogleSheetsConfig>, token: stri
   );
 
   if (!response.ok) {
+    await logGoogleApiError("preparazione intestazioni", response);
     throw new Error("Non sono riuscito a preparare le intestazioni Google Sheets");
   }
 }
@@ -456,6 +465,7 @@ async function findExpenseRowNumber(
   );
 
   if (!response.ok) {
+    await logGoogleApiError("ricerca spesa", response);
     throw new Error("Non sono riuscito a cercare la spesa su Google Sheets");
   }
 
@@ -476,6 +486,7 @@ async function getSheetId(config: Required<GoogleSheetsConfig>, token: string): 
   );
 
   if (!response.ok) {
+    await logGoogleApiError("lettura proprieta foglio", response);
     throw new Error("Non sono riuscito a leggere il foglio Google Sheets");
   }
 
@@ -526,6 +537,7 @@ async function getAccessToken(config: GoogleSheetsConfig): Promise<string> {
   });
 
   if (!response.ok) {
+    await logGoogleApiError("autenticazione", response);
     throw new Error("Autenticazione Google Sheets non riuscita");
   }
 
@@ -582,4 +594,15 @@ function base64UrlEncode(value: string | ArrayBuffer): string {
   }
 
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function logGoogleApiError(action: string, response: Response): Promise<void> {
+  const body = await response.text().catch(() => "");
+
+  console.error("Errore Google API Spendino", {
+    action,
+    body: body.slice(0, 1200),
+    status: response.status,
+    statusText: response.statusText,
+  });
 }

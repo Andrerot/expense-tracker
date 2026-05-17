@@ -72,7 +72,11 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 
 - [x] Migliorare il parser per gestire frasi piu naturali, ad esempio `ho pagato 18 euro per una pizza ieri sera`.
 - [x] Ampliare il riconoscimento delle date naturali con espressioni come `lunedi scorso`, `la settimana scorsa`, `a fine mese`.
+- [x] Ampliare ulteriormente le date naturali con `l'altro ieri`, `due giorni fa`, `mese scorso`, `settimana prossima` e riferimenti al weekend.
+- [x] Supportare date esplicite con varianti italiane come `primo di maggio`, `1 di maggio`, `15 novembre 2025` e formati numerici.
+- [x] Supportare importi dettati a voce come `dodici euro`, `dodici euro e cinquanta`, `12 euro e 50 centesimi` e `12 50`.
 - [x] Gestire meglio descrizioni con importi multipli, scegliendo l'importo principale e conservando il testo originale.
+- [x] Segnalare in revisione casi ambigui come importi elevati, date future lontane e date multiple nella stessa frase.
 - [x] Aggiungere messaggi di errore piu utili quando manca l'importo o la frase e ambigua.
 - [x] Aggiungere test automatici per gli esempi principali di parsing in italiano.
 
@@ -149,6 +153,13 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 - [x] Gestire errore di cancellazione con messaggio chiaro e senza rimuovere la spesa dalla UI se l'operazione fallisce.
 - [x] Mostrare se una spesa arriva da testo o voce.
 - [x] Preparare lo storage per cancellazioni, non solo append.
+- [x] Aggiungere un pulsante manuale `Aggiorna` nello storico per ricaricare le spese dallo storage configurato, utile quando il Google Sheet viene modificato fuori dall'app.
+- [x] Rendere modificabili le spese esclusivamente nel tab `Storico`, con un pannello di modifica per importo, data, descrizione e categoria.
+- [x] Implementare `PATCH /api/expenses/:id` per aggiornare una spesa esistente mantenendo invariati `id`, `rawInput`, `source` e `createdAt`.
+- [x] Aggiornare su Google Sheets esattamente la riga corrispondente alla spesa cercandola tramite `id`, anche se il foglio e stato riordinato manualmente.
+- [x] Aggiungere update equivalente nel fallback locale `data/expenses.json`, sostituendo la spesa per `id`.
+- [x] Gestire il caso in cui la spesa da modificare non esista piu nello storage, mostrando un errore chiaro e senza alterare lo stato locale.
+- [x] Mantenere lo stile grafico attuale dell'app durante la modifica spese: stesso linguaggio visuale premium, mobile-first, superfici leggere, pulsanti coerenti e nessun restyling invasivo.
 
 ## Feature: Protezione App Personale
 
@@ -158,6 +169,7 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 - [x] Permettere il reset manuale dello sblocco locale cancellando i dati dell'app o chiamando `POST /api/auth/lock`; resta possibile aggiungere un pulsante UI dedicato in futuro.
 - [x] Proteggere la UI client e le API spese tramite middleware con cookie firmato.
 - [x] Mostrare messaggi semplici per PIN errato senza esporre dettagli tecnici.
+- [x] Aggiungere rate limit ai tentativi di sblocco PIN, almeno per IP o finestra temporale breve, per evitare tentativi illimitati.
 
 ## Feature: Setup Automatico Google Sheets
 
@@ -167,16 +179,35 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 - [x] Supportare condivisione opzionale del nuovo file con `GOOGLE_SHEETS_SHARE_WITH_EMAIL` quando Google Drive API e abilitata.
 - [x] Se viene creato un nuovo file o una nuova tab, restituire/loggare un messaggio chiaro con nome foglio e id, senza esporre credenziali.
 - [x] Mantenere il fallback locale di sviluppo quando le credenziali Google non sono configurate.
+- [x] Cacheare il token OAuth Google Sheets fino a scadenza, evitando di richiederne uno nuovo per ogni lettura, append, cancellazione o diagnostica.
 - [ ] Aggiungere test o verifiche manuali con credenziali reali per: foglio esistente, tab mancante, foglio non trovato e credenziali assenti.
+
+## Feature: Archiviazione Storica Automatica
+
+- [x] Introdurre il routing automatico delle spese per foglio: anno corrente o futuro in `Expenses`, anni passati in `Archive_Detail_YYYY`.
+- [x] Creare automaticamente il foglio archivio annuale quando viene salvata una spesa con data passata.
+- [x] Archiviare automaticamente da `Expenses` le righe di anni passati quando lo storico operativo viene ricaricato, cosi l'app resta leggera nel tempo.
+- [x] Fare in modo che modifica e cancellazione cerchino la spesa per `id` anche nei fogli archivio annuali.
+- [x] Spostare automaticamente una spesa tra `Expenses` e `Archive_Detail_YYYY` se durante la modifica cambia anno di competenza.
+- [x] Aggiungere il foglio `Generale` con riepilogo annuale e mensile senza dettaglio categorie.
+- [x] Aggiungere nel tab impostazioni il comando manuale `Ricostruisci Generale`.
+- [x] Aggiungere test per routing archivio e calcolo riepilogo mensile/annuale.
 
 ## Feature: Impostazioni e Diagnostica
 
 - [x] Aggiungere un tab `Impost.` mobile-first.
 - [x] Mostrare stato storage locale o Google Sheets senza chiamate distruttive.
 - [x] Aggiungere diagnostica manuale Google Sheets dal tab impostazioni.
+- [x] Estendere la diagnostica storage con stato foglio operativo, foglio `Generale` e numero/nome archivi annuali rilevati.
 - [x] Aggiungere pulsante `Blocca app` per cancellare lo sblocco sul dispositivo.
 - [x] Aggiungere export CSV delle spese dallo storage configurato.
+- [x] Aggiungere backup CSV completo che include `Expenses` e tutti gli `Archive_Detail_YYYY`.
 - [x] Proteggere diagnostica ed export con cookie PIN.
+
+## Feature: Riepiloghi App
+
+- [x] Mostrare nella schermata principale totale di oggi, mese corrente, anno corrente e media giornaliera del mese.
+- [x] Mantenere i riepiloghi leggeri e coerenti con la grafica attuale, senza aggiungere un nuovo tab.
 
 ## Feature: Hardening API
 
@@ -190,12 +221,12 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 
 - [~] Aggiungere test unitari per parser, date e categorizzazione. Aggiunto `pnpm test:parser` per parser, date naturali e categorizzazione indiretta.
 - [x] Aggiungere test per il fallback locale su `data/expenses.json`.
-- [ ] Aggiungere test per API `GET /api/expenses` e `POST /api/expenses`.
+- [x] Aggiungere test per API `GET /api/expenses` e `POST /api/expenses`.
 - [x] Aggiungere casi di test specifici per input vocali trascritti male o con punteggiatura assente.
 - [x] Aggiungere test per la logica di revisione spesa incerta.
 - [x] Aggiungere test per completezza metadati categorie.
 - [x] Aggiungere test per validazione PIN e token di sblocco.
-- [ ] Aggiungere test API per export CSV e diagnostica storage.
+- [x] Aggiungere test API per export CSV e diagnostica storage.
 - [ ] Verificare manualmente il flusso su browser mobile.
 - [x] Verificare che la PWA resti installabile dopo le modifiche UI. Manifest rafforzato per mobile, icone verificate 192/512, service worker aggiornato per shell offline e asset statici.
 
@@ -208,24 +239,12 @@ I task sono divisi per feature e pensati per essere lavorati in modo incremental
 - [x] Prevedere una modalita completamente locale: parser e categorizzazione rule-based senza AI.
 - [x] Documentare che il PIN statico e una protezione leggera per uso personale, non una vera autenticazione multiutente.
 
-## Prossima Decisione Consigliata
+## Prossime Verifiche Consigliate
 
-La prossima decisione non e piu il provider AI, che e stato scelto: Gemini 2.5 Flash-Lite.
-Prima di implementare, decidere solo se attivarlo subito in sviluppo o lasciarlo dietro flag disabilitato di default.
-
-La scelta fatta privilegia:
-
-1. buona comprensione dell'italiano;
-2. costo nullo o molto basso;
-3. integrazione semplice in Next.js;
-4. fallback locale sempre disponibile;
-5. trattamento prudente dei dati personali.
-
-Quando si passa all'implementazione, aggiornare:
-
-- `src/lib/categorizeExpense.ts` o un nuovo modulo classifier;
-- `app/api/expenses/route.ts`, se la classificazione diventa asincrona;
-- `.env.local.example`, se servono nuove variabili ambiente.
+- [ ] Verificare manualmente con credenziali Google reali: foglio esistente, tab mancante, foglio non trovato e credenziali assenti.
+- [ ] Verificare manualmente su smartphone installato come PWA: input testuale, input vocale, storico, modifica, cancellazione, export e `Ricostruisci Generale`.
+- [ ] Valutare una soluzione alternativa di trascrizione audio lato server solo se la Web Speech API risulta poco affidabile sul dispositivo reale.
+- [ ] Valutare categorie personalizzabili dopo qualche settimana di utilizzo reale.
 
 ## Feature Non Prioritaria: Filtri Spese Salvate
 

@@ -12,6 +12,7 @@ type ExpenseListProps = {
   expenses: Expense[];
   groupByDate?: boolean;
   onDeleteExpense?: (expense: Expense) => void;
+  onEditExpense?: (expense: Expense) => void;
 };
 
 export function ExpenseList({
@@ -20,6 +21,7 @@ export function ExpenseList({
   expenses,
   groupByDate = false,
   onDeleteExpense,
+  onEditExpense,
 }: ExpenseListProps) {
   if (expenses.length === 0) {
     return (
@@ -46,6 +48,7 @@ export function ExpenseList({
               deletingExpenseId={deletingExpenseId}
               expenses={group.expenses}
               onDeleteExpense={onDeleteExpense}
+              onEditExpense={onEditExpense}
             />
           </section>
         ))}
@@ -54,7 +57,12 @@ export function ExpenseList({
   }
 
   return (
-    <ExpenseRows deletingExpenseId={deletingExpenseId} expenses={expenses} onDeleteExpense={onDeleteExpense} />
+    <ExpenseRows
+      deletingExpenseId={deletingExpenseId}
+      expenses={expenses}
+      onDeleteExpense={onDeleteExpense}
+      onEditExpense={onEditExpense}
+    />
   );
 }
 
@@ -62,7 +70,8 @@ function ExpenseRows({
   deletingExpenseId,
   expenses,
   onDeleteExpense,
-}: Pick<ExpenseListProps, "deletingExpenseId" | "expenses" | "onDeleteExpense">) {
+  onEditExpense,
+}: Pick<ExpenseListProps, "deletingExpenseId" | "expenses" | "onDeleteExpense" | "onEditExpense">) {
   return (
     <div className="space-y-2">
       {expenses.map((expense) => {
@@ -98,6 +107,30 @@ function ExpenseRows({
                 <p className="text-right text-lg font-black text-slate-950">
                   {currencyFormatter.format(expense.amount)}
                 </p>
+                {onEditExpense ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditExpense(expense)}
+                    disabled={isDeleting}
+                    aria-label={`Modifica ${expense.description}`}
+                    title="Modifica spesa"
+                    className="grid size-9 place-items-center rounded-xl border border-cyan-100 bg-cyan-50 text-xs font-black text-cyan-800 transition active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="size-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2.3"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                ) : null}
                 {onDeleteExpense ? (
                   <button
                     type="button"

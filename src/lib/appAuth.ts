@@ -1,6 +1,15 @@
 export const AUTH_COOKIE_NAME = "spendino_unlocked";
 export const AUTH_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 export const DEFAULT_APP_PIN = "1234";
+const PIN_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const PIN_RATE_LIMIT_MAX_ATTEMPTS = 5;
+
+type PinAttemptState = {
+  attempts: number;
+  resetAt: number;
+};
+
+const pinAttemptStore = new Map<string, PinAttemptState>();
 
 export function getAppPin(): string {
   return process.env.APP_PIN?.trim() || DEFAULT_APP_PIN;
@@ -8,6 +17,42 @@ export function getAppPin(): string {
 
 export function isPinValid(value: unknown): boolean {
   return typeof value === "string" && value.trim() === getAppPin();
+}
+
+export function isPinRateLimited(key: string, now = Date.now()): boolean {
+  const state = pinAttemptStore.get(key);
+
+  if (!state) {
+    return false;
+  }
+
+  if (state.resetAt <= now) {
+    pinAttemptStore.delete(key);
+    return false;
+  }
+
+  return state.attempts >= PIN_RATE_LIMIT_MAX_ATTEMPTS;
+}
+
+export function recordFailedPinAttempt(key: string, now = Date.now()): void {
+  const current = pinAttemptStore.get(key);
+
+  if (!current || current.resetAt <= now) {
+    pinAttemptStore.set(key, {
+      attempts: 1,
+      resetAt: now + PIN_RATE_LIMIT_WINDOW_MS,
+    });
+    return;
+  }
+
+  pinAttemptStore.set(key, {
+    attempts: current.attempts + 1,
+    resetAt: current.resetAt,
+  });
+}
+
+export function clearPinRateLimit(key: string): void {
+  pinAttemptStore.delete(key);
 }
 
 export async function createAuthToken(now = Math.floor(Date.now() / 1000)): Promise<string> {

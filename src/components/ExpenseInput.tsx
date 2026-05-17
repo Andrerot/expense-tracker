@@ -220,7 +220,7 @@ export function ExpenseInput({ isSubmitting, onSubmit }: ExpenseInputProps) {
         placeholder="12,50 pranzo al bar"
         className="min-h-32 w-full resize-none rounded-2xl border border-white/70 bg-white/90 px-4 py-4 text-lg leading-7 text-slate-950 shadow-[0_18px_50px_rgba(15,23,42,0.10)] outline-none ring-1 ring-slate-900/5 transition placeholder:text-slate-400 focus:border-cyan-300 focus:bg-white focus:ring-4 focus:ring-cyan-100"
       />
-      <div className="grid grid-cols-[1fr_56px] gap-3">
+      <div className="grid grid-cols-[1fr_80px] gap-3">
         <button
           type="submit"
           disabled={isBusy || rawInput.trim().length === 0}

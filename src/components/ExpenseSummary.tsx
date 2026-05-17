@@ -7,18 +7,29 @@ const currencyFormatter = new Intl.NumberFormat("it-IT", {
 });
 
 export function ExpenseSummary({ expenses }: { expenses: Expense[] }) {
-  const today = toIsoDate(new Date());
+  const now = new Date();
+  const today = toIsoDate(now);
   const todayTotal = expenses
     .filter((expense) => expense.date === today)
     .reduce((sum, expense) => sum + expense.amount, 0);
   const monthTotal = expenses
     .filter((expense) => isSameMonth(expense.date))
     .reduce((sum, expense) => sum + expense.amount, 0);
+  const yearTotal = expenses
+    .filter((expense) => expense.date.slice(0, 4) === String(now.getFullYear()))
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const averageDayInMonth = monthTotal / now.getDate();
 
   return (
     <section className="grid grid-cols-2 gap-3">
       <SummaryItem label="Oggi" value={currencyFormatter.format(todayTotal)} accent="from-cyan-300 to-teal-300" />
       <SummaryItem label="Mese" value={currencyFormatter.format(monthTotal)} accent="from-amber-300 to-rose-300" />
+      <SummaryItem label="Anno" value={currencyFormatter.format(yearTotal)} accent="from-indigo-300 to-sky-300" />
+      <SummaryItem
+        label="Media giorno"
+        value={currencyFormatter.format(averageDayInMonth)}
+        accent="from-emerald-300 to-lime-300"
+      />
     </section>
   );
 }

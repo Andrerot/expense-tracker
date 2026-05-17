@@ -20,6 +20,18 @@ export function getExpenseReview(expense: Expense): ExpenseReview {
     reasons.push("Importi multipli rilevati");
   }
 
+  if (expense.notes?.includes("Importo elevato")) {
+    reasons.push("Importo elevato");
+  }
+
+  if (expense.notes?.includes("Data futura lontana")) {
+    reasons.push("Data futura lontana");
+  }
+
+  if (expense.notes?.includes("date multiple")) {
+    reasons.push("Date multiple rilevate");
+  }
+
   return {
     required: reasons.length > 0,
     reasons,

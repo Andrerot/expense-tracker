@@ -30,11 +30,17 @@ app/
       unlock/
         route.ts
     expenses/
+      [id]/
+        route.ts
       export/
+        route.ts
+      preview/
         route.ts
       route.ts
     storage/
       diagnostics/
+        route.ts
+      summary/
         route.ts
   globals.css
   layout.tsx
@@ -48,6 +54,7 @@ public/
 src/
   components/
     ExpenseFilters.tsx
+    ExpenseEditPanel.tsx
     ExpenseInput.tsx
     ExpenseList.tsx
     ExpenseReviewPanel.tsx
@@ -60,10 +67,12 @@ src/
     categoryMeta.ts
     classifyExpense.ts
     dates.ts
+    expenseArchive.ts
     expenseReview.ts
     filterExpenses.ts
     geminiClassifier.ts
     googleSheets.ts
+    italianNumbers.ts
     localExpenseStore.ts
     parseExpenseInput.ts
   types/
@@ -85,7 +94,7 @@ src/
    - usa Gemini 2.5 Flash-Lite se la classificazione AI e abilitata e configurata;
    - usa `categorizeExpense` rule-based come fallback obbligatorio.
 10. L'API salva la spesa tramite `appendExpense`.
-11. `appendExpense` prepara Google Sheets se configurato, altrimenti usa il fallback locale.
+11. `appendExpense` prepara Google Sheets se configurato, decide il foglio target e usa `Expenses` per anno corrente/futuro o `Archive_Detail_YYYY` per anni passati. Senza Google usa il fallback locale.
 12. L'API restituisce la spesa normalizzata.
 13. La UI aggiorna riepiloghi, estratto recente e tab `Storico`.
 
@@ -94,8 +103,8 @@ src/
 `SpendinoApp` gestisce una navigazione client-side a tab:
 
 - `Aggiungi`: flusso principale per input testuale/vocale, feedback, revisione e riepilogo essenziale;
-- `Storico`: lista completa delle spese salvate, filtri, totale filtrato, raggruppamento per data e cancellazione.
-- `Impost.`: stato storage, diagnostica manuale, export CSV e blocco app.
+- `Storico`: lista delle spese operative, filtri, totale filtrato, raggruppamento per data, modifica, cancellazione e refresh manuale.
+- `Impost.`: stato storage, diagnostica manuale, export CSV corrente, backup CSV completo, ricostruzione `Generale` e blocco app.
 
 Il tab attivo vive in stato React locale.
 Per ora non viene persistito su reload, cosi l'app riparte sempre dal flusso di inserimento rapido.
@@ -165,13 +174,25 @@ Responsabilita:
 - restituire `500` per errori inattesi in cancellazione.
 - richiedere cookie di sblocco PIN valido.
 
-La modifica delle spese salvate non e prevista in questa fase.
+La cancellazione cerca la spesa per `id` sia in `Expenses` sia nei fogli `Archive_Detail_YYYY`.
+
+### PATCH `/api/expenses/[id]`
+
+Responsabilita:
+
+- ricevere importo, data, descrizione, categoria e note aggiornate;
+- preservare `id`, `rawInput`, `source` e `createdAt`;
+- aggiornare la riga esistente nello storage configurato;
+- spostare automaticamente la riga tra `Expenses` e `Archive_Detail_YYYY` se cambia anno di competenza;
+- restituire `404` se la spesa non esiste;
+- richiedere cookie di sblocco PIN valido.
 
 ### GET `/api/expenses/export`
 
 Responsabilita:
 
 - leggere le spese dallo storage configurato;
+- supportare `scope=current` per il foglio operativo e `scope=all` per backup completo con archivi;
 - restituire un file CSV scaricabile;
 - richiedere cookie di sblocco PIN valido.
 
@@ -217,6 +238,19 @@ Non chiama Google e non crea file.
 
 Esegue la diagnostica reale dello storage configurato.
 Se Google Sheets e configurato, puo creare file, tab e intestazioni mancanti.
+Richiede cookie di sblocco PIN valido.
+
+La diagnostica estesa restituisce stato foglio operativo, stato foglio `Generale`, conteggio archivi annuali e nomi archive rilevati.
+
+### POST `/api/storage/summary`
+
+Ricostruisce il foglio `Generale`.
+Legge `Expenses` e tutti i fogli `Archive_Detail_YYYY`, aggrega per anno e mese, poi riscrive:
+
+```text
+Anno | Gen | Feb | Mar | Apr | Mag | Giu | Lug | Ago | Set | Ott | Nov | Dic | Totale
+```
+
 Richiede cookie di sblocco PIN valido.
 
 ## Componenti UI
@@ -388,8 +422,24 @@ Contiene funzioni condivise per:
 
 - conversione `Date` -> `YYYY-MM-DD`;
 - normalizzazione testo italiano;
-- interpretazione date naturali semplici, inclusi `ieri`, `domani`, giorni della settimana, `settimana scorsa` e `fine mese`;
+- interpretazione date naturali, incluse forme come `ieri`, `l'altro ieri`, `due giorni fa`, giorni della settimana, `settimana scorsa`, `mese scorso`, `questo weekend`, `fine mese`;
+- interpretazione date esplicite come `primo di maggio`, `1 maggio`, `15 novembre 2025`, `01/05/2025`;
+- identificazione e rimozione delle espressioni data dalla descrizione normalizzata;
 - confronto con mese corrente.
+
+### `src/lib/italianNumbers.ts`
+
+Contiene parsing di numeri italiani da parole fino a 99.
+Viene usato per importi vocali e date relative come `due giorni fa`.
+
+### `src/lib/expenseArchive.ts`
+
+Contiene logica pura per:
+
+- decidere il foglio target di una spesa;
+- costruire nomi `Archive_Detail_YYYY`;
+- calcolare righe riepilogo per `Generale`;
+- convertire riepiloghi in valori scrivibili su Google Sheets.
 
 ### `src/lib/filterExpenses.ts`
 
@@ -410,6 +460,9 @@ Attualmente richiede revisione per:
 - categoria `other`;
 - descrizione debole;
 - input con importi multipli.
+- importo elevato;
+- data futura lontana;
+- date multiple nella stessa frase.
 
 ### `src/lib/appAuth.ts`
 
@@ -420,7 +473,8 @@ Responsabilita:
 - leggere `APP_PIN`, con default locale `1234`;
 - firmare un token di sblocco tramite HMAC;
 - verificare il cookie persistente usato dal middleware;
-- mantenere la durata dello sblocco a circa 180 giorni.
+- mantenere la durata dello sblocco a circa 180 giorni;
+- applicare rate limit in memoria sui tentativi PIN falliti.
 
 ## Test
 
@@ -431,8 +485,10 @@ Il test usa il runner Node diretto con type stripping sperimentale, senza dipend
 Copre:
 
 - frasi naturali in italiano;
-- date naturali;
+- date naturali ed esplicite;
+- importi vocali e importi sporchi;
 - importi multipli;
+- segnali di revisione per importi elevati e date ambigue;
 - categorizzazione indiretta;
 - errore quando manca l'importo.
 
@@ -479,7 +535,26 @@ Copre:
 
 - validazione del PIN statico;
 - creazione e verifica del token firmato di sblocco;
-- rifiuto di token assente o alterato.
+- rifiuto di token assente o alterato;
+- rate limit dei tentativi falliti.
+
+### `pnpm test:archive`
+
+Esegue `tests/expenseArchive.test.mjs`.
+Copre:
+
+- routing delle spese verso `Expenses` o `Archive_Detail_YYYY`;
+- calcolo riepilogo mensile e annuale per `Generale`.
+
+### `pnpm test:api`
+
+Esegue i test API.
+Copre:
+
+- `GET` e `POST /api/expenses`;
+- export CSV corrente e completo;
+- diagnostica storage;
+- ricostruzione summary in modalita locale.
 
 ### `src/lib/googleSheets.ts`
 
@@ -495,8 +570,12 @@ Responsabilita:
 - condividere un nuovo spreadsheet con `GOOGLE_SHEETS_SHARE_WITH_EMAIL` quando configurata e quando Google Drive API e abilitata;
 - creare la tab configurata se manca;
 - preparare la riga intestazione richiesta;
-- appendere una riga al foglio;
-- cancellare una riga esistente tramite `id`;
+- appendere una riga al foglio target corretto;
+- archiviare automaticamente righe passate da `Expenses` verso `Archive_Detail_YYYY`;
+- cancellare una riga esistente tramite `id`, anche negli archivi;
+- aggiornare una riga esistente tramite `id` e spostarla se cambia foglio target;
+- ricostruire il foglio `Generale`;
+- esportare spese operative o tutte le spese;
 - leggere righe dal foglio;
 - mappare righe Google Sheets in `Expense`.
 

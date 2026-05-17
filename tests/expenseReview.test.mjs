@@ -62,6 +62,21 @@ test("requires review for uncertain category, weak description and multiple amou
   ]);
 });
 
+test("requires review for high amounts and ambiguous dates", () => {
+  const review = getExpenseReview(
+    makeExpense({
+      notes: "Importo elevato da controllare. Data futura lontana da controllare. Input con date multiple da controllare.",
+    }),
+  );
+
+  assert.equal(review.required, true);
+  assert.deepEqual(review.reasons, [
+    "Importo elevato",
+    "Data futura lontana",
+    "Date multiple rilevate",
+  ]);
+});
+
 for (const { name, run } of tests) {
   await run();
   console.log(`ok - ${name}`);

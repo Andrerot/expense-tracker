@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { createAuthToken, isPinValid, verifyAuthToken } from "../src/lib/appAuth.ts";
+import {
+  clearPinRateLimit,
+  createAuthToken,
+  isPinRateLimited,
+  isPinValid,
+  recordFailedPinAttempt,
+  verifyAuthToken,
+} from "../src/lib/appAuth.ts";
 
 process.env.APP_PIN = "2468";
 process.env.APP_AUTH_SECRET = "test-secret";
@@ -12,4 +19,17 @@ assert.equal(await verifyAuthToken(token), true);
 assert.equal(await verifyAuthToken(`${token}x`), false);
 assert.equal(await verifyAuthToken(undefined), false);
 
-console.log("ok - app auth validates pin and signed unlock token");
+const rateLimitKey = "test-rate-limit-key";
+const now = Date.parse("2026-05-01T10:00:00.000Z");
+clearPinRateLimit(rateLimitKey);
+assert.equal(isPinRateLimited(rateLimitKey, now), false);
+
+for (let index = 0; index < 5; index += 1) {
+  recordFailedPinAttempt(rateLimitKey, now + index);
+}
+
+assert.equal(isPinRateLimited(rateLimitKey, now + 5), true);
+assert.equal(isPinRateLimited(rateLimitKey, now + 10 * 60 * 1000 + 1), false);
+clearPinRateLimit(rateLimitKey);
+
+console.log("ok - app auth validates pin, signed unlock token and rate limit");

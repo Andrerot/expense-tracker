@@ -1,10 +1,19 @@
 # Spendino
 
-Spendino e una PWA mobile-first per registrare spese quotidiane con frasi naturali, ad esempio `12,50 pranzo al bar`.
-Quando il browser lo supporta, il pulsante microfono usa la Web Speech API per dettare la frase in italiano e salva automaticamente quando la dettatura finisce.
-Su smartphone la dettatura dipende dal browser e richiede HTTPS in produzione.
+Spendino e una PWA mobile-first per registrare spese quotidiane con testo naturale o dettatura vocale.
+E pensata per uso personale di lungo periodo con Google Sheets come archivio principale e fallback locale per sviluppo.
 
-## Avvio
+Esempi supportati:
+
+```text
+12,50 pranzo al bar
+20€ pranzo primo maggio
+dodici euro e cinquanta bar
+35 euro benzina lunedi scorso
+8 treno 15 novembre 2025
+```
+
+## Avvio Locale
 
 ```bash
 pnpm install
@@ -13,9 +22,29 @@ pnpm dev
 
 Apri `http://localhost:3000`.
 
+Se `pnpm` non e disponibile ma `node_modules` e gia presente:
+
+```bash
+node node_modules/next/dist/bin/next dev
+```
+
+## Funzioni Principali
+
+- Inserimento spese da testo naturale in italiano.
+- Input vocale tramite Web Speech API quando supportata dal browser.
+- Parsing locale di importo, descrizione e data.
+- Categorizzazione rule-based con AI Gemini opzionale.
+- Revisione prima del salvataggio per casi incerti.
+- PIN personale con cookie httpOnly firmato.
+- Tab `Aggiungi`, `Storico` e `Impost.`.
+- Modifica e cancellazione spese dallo storico.
+- Filtri per periodo, categoria, sorgente e ricerca testuale.
+- Riepiloghi in app: oggi, mese, anno e media giornaliera del mese.
+- Export CSV corrente e backup CSV completo.
+- Archiviazione storica automatica su fogli annuali.
+
 ## Protezione con PIN
 
-Spendino richiede un PIN prima di mostrare l'app e prima di usare le API delle spese.
 Configura in produzione:
 
 ```env
@@ -24,24 +53,18 @@ APP_AUTH_SECRET=
 APP_ALLOWED_ORIGIN=
 ```
 
-`APP_PIN` e il PIN personale. `APP_AUTH_SECRET` firma il cookie persistente di sblocco; usa una stringa lunga e casuale.
-`APP_ALLOWED_ORIGIN` e opzionale; in produzione puoi impostarlo alla URL HTTPS dell'app per rendere piu esplicito il controllo origine delle API.
-Dopo il primo sblocco sul cellulare, il cookie resta valido per circa 180 giorni. Per bloccare di nuovo l'app, cancella i dati del sito/app dal browser o dalla PWA.
+`APP_PIN` e il PIN personale.
+`APP_AUTH_SECRET` firma il cookie persistente di sblocco; genera una stringa lunga e casuale e non dovrai ricordarla.
+`APP_ALLOWED_ORIGIN` e opzionale ma consigliato in produzione con la URL HTTPS dell'app.
 
-Questa e una protezione leggera per uso personale, non un sistema di autenticazione multiutente.
+Il cookie resta valido per circa 180 giorni. Il tab `Impost.` contiene il pulsante `Blocca app`.
+Lo sblocco PIN ha un rate limit locale per ridurre tentativi ripetuti.
 
-## Installazione su telefono
-
-Spendino e configurata come PWA installabile. In produzione deve essere servita via HTTPS, ad esempio da Vercel o da un dominio personale con certificato valido.
-
-Su Android apri l'URL in Chrome e scegli `Installa app` o `Aggiungi a schermata Home`.
-Su iPhone apri l'URL in Safari, usa Condividi e scegli `Aggiungi alla schermata Home`.
-
-Il service worker viene registrato solo in produzione: la shell dell'app resta apribile offline, mentre lettura, salvataggio e cancellazione delle spese richiedono connessione al backend.
+Questa resta una protezione leggera per uso personale, non autenticazione multiutente.
 
 ## Google Sheets
 
-L'app usa Google Sheets quando sono configurate queste variabili in `.env.local`:
+Variabili ambiente:
 
 ```env
 GOOGLE_SHEETS_CLIENT_EMAIL=
@@ -52,42 +75,52 @@ GOOGLE_SHEETS_SPREADSHEET_TITLE=Spendino Expenses
 GOOGLE_SHEETS_SHARE_WITH_EMAIL=
 ```
 
-Il foglio deve avere queste colonne:
+Quando Google Sheets e configurato, Spendino prepara automaticamente file, tab e intestazioni mancanti.
+Se `GOOGLE_SHEETS_SPREADSHEET_ID` manca o non esiste, crea un nuovo file e scrive nei log lo `spreadsheetId` da rendere stabile nelle variabili ambiente.
+
+### Struttura Fogli
+
+`Expenses` contiene l'anno corrente e le spese future operative.
+
+Le spese di anni passati vengono salvate o spostate automaticamente in:
+
+```text
+Archive_Detail_YYYY
+```
+
+Esempio:
+
+```text
+Archive_Detail_2025
+Archive_Detail_2026
+```
+
+Il foglio `Generale` contiene il riepilogo annuale e mensile:
+
+```text
+Anno | Gen | Feb | Mar | Apr | Mag | Giu | Lug | Ago | Set | Ott | Nov | Dic | Totale
+```
+
+Le righe di spesa usano sempre:
 
 ```text
 id | date | amount | currency | category | description | rawInput | source | createdAt | notes
 ```
 
-Senza credenziali Google, l'app salva i dati in locale in `data/expenses.json`, utile per lo sviluppo.
-Con credenziali Google configurate, l'app verifica automaticamente il file, crea la tab `Expenses` se manca e prepara le intestazioni.
-Se `GOOGLE_SHEETS_SPREADSHEET_ID` manca o punta a un file non trovato, l'app crea un nuovo Google Sheet e scrive nei log lo `spreadsheetId` da copiare nelle variabili ambiente per renderlo stabile.
-Se imposti `GOOGLE_SHEETS_SHARE_WITH_EMAIL`, l'app prova anche a condividere il nuovo file con quella email come editor; per questa opzione serve abilitare anche la Google Drive API nel progetto Google Cloud.
-
-### Diagnostica Google Sheets su Vercel
-
-Se l'app mostra un errore Google Sheets, apri Vercel e controlla `Project > Logs`.
-Le chiamate Google fallite vengono loggate come `Errore Google API Spendino` con azione, status HTTP e corpo risposta Google.
-
-Indicazioni rapide:
-
-- `403 SERVICE_DISABLED`: abilita Google Sheets API nel progetto Google Cloud.
-- `403 insufficientPermissions`: controlla scope, service account e condivisione del file.
-- `400 invalid_grant`: verifica `GOOGLE_SHEETS_CLIENT_EMAIL` e `GOOGLE_SHEETS_PRIVATE_KEY`, soprattutto gli `\n` nella private key.
-- `404`: lo spreadsheet id non esiste o il service account non puo leggerlo; se manca lo id, l'app prova a creare un nuovo file.
-- errore su `condivisione file`: abilita Google Drive API o rimuovi `GOOGLE_SHEETS_SHARE_WITH_EMAIL`.
-
 ## Impostazioni
 
 Il tab `Impost.` permette di:
 
-- vedere lo stato dello storage configurato;
-- lanciare manualmente la diagnostica Google Sheets;
-- esportare le spese in CSV;
-- bloccare di nuovo l'app sul dispositivo.
+- vedere modalità storage, stato `Expenses`, stato `Generale` e archivi rilevati;
+- lanciare diagnostica storage;
+- esportare CSV corrente;
+- generare backup CSV completo con `Expenses + Archive_Detail_YYYY`;
+- ricostruire manualmente il foglio `Generale`;
+- bloccare di nuovo l'app.
 
 ## Classificazione AI
 
-La categorizzazione AI con Gemini e opzionale. In `.env.local`:
+Gemini e opzionale:
 
 ```env
 GEMINI_API_KEY=
@@ -98,19 +131,38 @@ AI_CLASSIFICATION_COMPARE=false
 ```
 
 Se la AI non e configurata o fallisce, Spendino usa sempre la categorizzazione locale rule-based.
-La API key vive solo lato server; l'account Google usato per generarla non deve coincidere con l'account usato sul cellulare.
-Per confrontare categoria locale e Gemini nei log server durante lo sviluppo, imposta `AI_CLASSIFICATION_COMPARE=true`.
+La API key vive solo lato server. Alla AI vengono inviati solo input originale, descrizione, importo e data della nuova spesa, non lo storico completo.
+
+## PWA
+
+Spendino e installabile su smartphone. In produzione deve essere servita via HTTPS.
+
+Il service worker viene registrato solo in produzione: la shell puo aprirsi offline, mentre lettura, salvataggio, modifica e cancellazione richiedono il backend.
 
 ## Script
 
-- `pnpm dev`: avvia l'app in sviluppo
-- `pnpm build`: crea la build di produzione
-- `pnpm test:parser`: verifica parser, date naturali e categorizzazione principale
-- `pnpm test:categories`: verifica metadati e fallback categorie
-- `pnpm test:classifier`: verifica fallback e classificatore locale/AI
-- `pnpm test:expense-review`: verifica quando mostrare la revisione prima del salvataggio
-- `pnpm test:filters`: verifica i filtri dello storico
-- `pnpm test:local-store`: verifica cancellazione nello storage locale di sviluppo
-- `pnpm test:auth`: verifica PIN e token firmato di sblocco
-- `pnpm test`: esegue i test disponibili
+- `pnpm dev`: avvia sviluppo
+- `pnpm build`: crea build produzione
+- `pnpm start`: avvia build produzione
 - `pnpm typecheck`: controlla TypeScript
+- `pnpm test`: esegue tutta la suite
+- `pnpm test:parser`: parser, date naturali e importi vocali
+- `pnpm test:classifier`: categorizzazione locale e AI mockata
+- `pnpm test:expense-review`: regole di revisione
+- `pnpm test:filters`: filtri storico
+- `pnpm test:local-store`: fallback locale
+- `pnpm test:auth`: PIN, token e rate limit
+- `pnpm test:archive`: archiviazione storica e riepilogo
+- `pnpm test:api`: API spese, export e diagnostica
+
+## Release 1.0.0
+
+Questa release e pronta per uso personale stabile.
+Prima del deploy definitivo su Google Sheets reale, esegui una prova manuale con:
+
+- aggiunta spesa anno corrente;
+- aggiunta spesa anno passato;
+- modifica spesa cambiando anno;
+- cancellazione da storico;
+- `Ricostruisci Generale`;
+- export CSV corrente e backup completo.

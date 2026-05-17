@@ -35,23 +35,24 @@ L'utente inserisce una frase naturale, l'app interpreta la spesa, la salva e mos
 - Lista delle ultime spese.
 - Totale giornaliero.
 - Totale del mese corrente.
+- Totale anno corrente e media giornaliera del mese.
 - Layout mobile-first.
 - Configurazione PWA con manifest, icone e service worker.
 - Protezione leggera con PIN personale persistente sul dispositivo.
 - Input vocale opzionale tramite Web Speech API quando supportata dal browser.
 - Cancellazione spese salvate.
+- Modifica spese salvate dal tab `Storico`.
 - Filtri per categoria, periodo, sorgente input e testo nello storico.
 - Revisione prima del salvataggio quando il parsing e incerto.
-- Tab impostazioni con diagnostica storage, export CSV e blocco app.
+- Tab impostazioni con diagnostica storage, export CSV corrente, backup CSV completo, ricostruzione `Generale` e blocco app.
+- Archiviazione storica automatica su fogli annuali Google Sheets.
 
 ### Non incluso nell'MVP corrente
 
 - Autenticazione.
 - Multiutente.
-- Modifica spese.
 - Grafici.
 - Budget.
-- Esportazione CSV.
 - Categorie personalizzabili.
 - Spese ricorrenti.
 
@@ -91,13 +92,15 @@ La home di inserimento puo mostrare solo un estratto delle ultime spese, mentre 
 
 Lo storico deve:
 
-- mostrare tutte le spese salvate;
+- mostrare le spese operative correnti caricate da `Expenses`;
 - raggruppare le spese per giorno quando utile alla lettura;
 - mostrare il totale relativo ai filtri attivi;
 - rendere i filtri apribili o comprimibili su smartphone;
 - supportare filtri rapidi per tutto, oggi, settimana e mese;
 - supportare filtro per categoria;
 - supportare ricerca testuale per descrizione, input originale e note;
+- permettere modifica e cancellazione di una spesa;
+- permettere refresh manuale per rileggere lo storage operativo;
 - mantenere la cancellazione disponibile ma non troppo facile da premere per errore.
 
 ### Categorizzazione AI
@@ -172,7 +175,7 @@ Come utente, voglio vedere le ultime spese registrate, cosi posso controllare ra
 
 ### US-004 - Riepilogo rapido
 
-Come utente, voglio vedere il totale di oggi e del mese corrente, cosi capisco subito l'andamento delle mie spese.
+Come utente, voglio vedere totale di oggi, mese corrente, anno corrente e media giornaliera del mese, cosi capisco subito l'andamento delle mie spese.
 
 ### US-005 - Uso da smartphone
 
@@ -210,16 +213,33 @@ Come utente, voglio consultare le spese vecchie in una sezione dedicata, cosi l'
 
 Come utente, voglio controllare e correggere una spesa prima del salvataggio quando l'app non e sicura dell'interpretazione, cosi evito dati sbagliati nello storico.
 
+### US-012 - Modifica spesa salvata
+
+Come utente, voglio modificare una spesa vecchia dallo storico, cosi posso correggere importo, data, descrizione o categoria senza aprire Google Sheets.
+
+### US-013 - Archiviazione automatica
+
+Come utente, voglio che l'app tenga leggero il foglio operativo e archivi automaticamente gli anni passati, cosi posso usare Spendino per molti anni senza manutenzione manuale del codice.
+
+### US-014 - Backup completo
+
+Come utente, voglio esportare sia le spese correnti sia un backup completo con archivi, cosi posso conservare una copia indipendente dei dati.
+
 ## Regole di Parsing
 
 Il parser deve:
 
 - identificare il primo importo presente nella frase;
 - accettare importi con virgola o punto decimale;
+- accettare importi vocali semplici, ad esempio `dodici euro` e `dodici euro e cinquanta`;
+- accettare importi sporchi frequenti come `12 50`;
 - accettare simbolo euro o parole come `euro`, `eur`;
 - preferire l'importo con valuta esplicita quando la frase contiene piu importi;
 - rimuovere parole di riempimento comuni dalla descrizione;
-- riconoscere almeno `oggi`, `ieri`, `domani`, i giorni della settimana, `lunedi scorso`, `la settimana scorsa` e `a fine mese`;
+- riconoscere date naturali come `oggi`, `ieri`, `l'altro ieri`, `due giorni fa`, `domani`, i giorni della settimana, `lunedi scorso`, `la settimana scorsa`, `settimana prossima`, `mese scorso`, riferimenti al weekend e `a fine mese`;
+- riconoscere date esplicite come `primo maggio`, `primo di maggio`, `15 novembre 2025`, `01/05/2025`;
+- non trattare parti di data come importi multipli;
+- segnalare in revisione importi elevati, date future lontane e date multiple;
 - usare la data corrente come fallback;
 - generare un errore chiaro quando non trova un importo valido.
 
@@ -235,6 +255,10 @@ ho pagato 18 euro per una pizza ieri sera
 35 euro benzina lunedi scorso
 50 supermercato la settimana scorsa
 9.99 netflix a fine mese
+20€ pranzo primo maggio
+dodici euro e cinquanta bar
+12 euro e 50 centesimi caffe
+20 pranzo 01/05/2025
 ```
 
 ## Categorie
@@ -281,7 +305,7 @@ export type Expense = {
 
 ## Google Sheets
 
-Il foglio deve usare queste colonne:
+Le righe di spesa devono usare queste colonne:
 
 ```text
 id | date | amount | currency | category | description | rawInput | source | createdAt | notes
@@ -300,11 +324,22 @@ GOOGLE_SHEETS_SHARE_WITH_EMAIL=
 
 I segreti non devono mai essere salvati nel repository.
 
-Quando le credenziali Google sono presenti, Spendino verifica il file prima delle operazioni di lettura, scrittura e cancellazione.
+Quando le credenziali Google sono presenti, Spendino verifica il file prima delle operazioni di lettura, scrittura, modifica e cancellazione.
 Se la tab configurata non esiste, viene creata automaticamente con le intestazioni richieste.
 Se lo spreadsheet configurato non esiste, o se manca `GOOGLE_SHEETS_SPREADSHEET_ID`, l'app crea un nuovo file Google Sheet intestato a `GOOGLE_SHEETS_SPREADSHEET_TITLE` e ne scrive l'id nei log server.
 Se `GOOGLE_SHEETS_SHARE_WITH_EMAIL` e configurata, l'app prova a condividere il nuovo file con quella email come editor usando Google Drive API.
 In produzione il nuovo id deve essere copiato in `GOOGLE_SHEETS_SPREADSHEET_ID`, altrimenti non e garantito che resti stabile tra deploy o istanze serverless.
+
+### Struttura storica Google Sheets
+
+- `Expenses`: foglio operativo con anno corrente e spese future.
+- `Archive_Detail_YYYY`: fogli annuali creati automaticamente per spese di anni passati.
+- `Generale`: foglio riepilogo con una riga per anno e colonne mensili.
+
+Una spesa con data passata deve essere salvata direttamente in `Archive_Detail_YYYY`.
+Quando lo storico viene ricaricato, eventuali righe passate rimaste in `Expenses` devono essere archiviate automaticamente.
+Modifica e cancellazione devono cercare la spesa per `id` anche negli archivi.
+Se una modifica cambia anno di competenza, la spesa deve essere spostata nel foglio target corretto.
 
 ## Protezione PIN
 
@@ -318,6 +353,7 @@ Requisiti:
 - il cookie di sblocco dura circa 180 giorni;
 - le API delle spese rifiutano richieste senza cookie valido;
 - le richieste mutating verso le API devono arrivare dalla stessa origine dell'app o da `APP_ALLOWED_ORIGIN`;
+- i tentativi PIN falliti sono limitati con rate limit locale;
 - il PIN statico non sostituisce una vera autenticazione multiutente.
 
 Variabili ambiente previste:
@@ -335,24 +371,28 @@ L'app include un tab `Impost.` per controlli personali.
 Funzioni:
 
 - mostrare il tipo di storage in uso, locale o Google Sheets;
+- mostrare stato foglio operativo, stato `Generale` e archivi annuali rilevati;
 - lanciare una diagnostica manuale dello storage;
-- esportare le spese caricate dallo storage in CSV;
+- esportare il CSV corrente;
+- esportare un backup CSV completo con `Expenses + Archive_Detail_YYYY`;
+- ricostruire manualmente il foglio `Generale`;
 - bloccare di nuovo l'app cancellando il cookie di sblocco.
 
 La diagnostica Google Sheets puo creare file o tab mancanti solo quando l'utente la avvia o quando una normale operazione di storage richiede preparazione.
 
-## Cancellazione Spese
+## Modifica e Cancellazione Spese
 
-La cancellazione di una spesa salvata e supportata.
+La modifica e la cancellazione di una spesa salvata sono supportate dal tab `Storico`.
 
 Requisiti:
 
+- l'utente puo modificare importo, data, descrizione e categoria;
+- `id`, `rawInput`, `source` e `createdAt` restano invariati;
 - l'utente puo cancellare una spesa dalla lista;
 - la cancellazione richiede conferma browser;
 - la spesa viene identificata tramite `id`;
-- dopo la cancellazione, lista e riepiloghi si aggiornano;
-- se la cancellazione fallisce, la spesa resta visibile e l'utente riceve un errore chiaro;
-- non e richiesta la modifica delle spese salvate.
+- dopo modifica o cancellazione, lista e riepiloghi si aggiornano;
+- se una operazione fallisce, lo stato locale non deve essere alterato e l'utente riceve un errore chiaro.
 
 La feature funziona sia con Google Sheets sia con fallback locale di sviluppo.
 
@@ -381,6 +421,9 @@ La revisione viene richiesta almeno quando:
 - la categoria e `other`;
 - la descrizione e troppo generica;
 - l'input contiene importi multipli.
+- l'importo e elevato;
+- la data e futura e lontana;
+- l'input contiene piu date.
 
 Durante la revisione l'utente puo correggere:
 
@@ -420,14 +463,18 @@ La preview indica se la categoria suggerita arriva da AI o da regole locali.
 - La spesa viene categorizzata come `food`.
 - La spesa appare nella lista subito dopo il salvataggio.
 - Il totale giornaliero e mensile si aggiornano.
+- Il totale annuale e la media giornaliera del mese si aggiornano.
 - Se Google Sheets e configurato, viene aggiunta una riga al foglio.
+- Se la data appartiene a un anno passato, la spesa viene salvata in `Archive_Detail_YYYY`.
+- Se una spesa viene modificata cambiando anno, viene spostata nel foglio corretto.
 - Se una spesa viene cancellata, viene rimossa dallo storage configurato.
 - Se sono applicati filtri, lista e riepiloghi riflettono solo le spese filtrate.
 - Se il parsing e incerto, la spesa viene salvata solo dopo conferma della preview.
 - Se Google Sheets non e configurato, lo storage locale di sviluppo continua a funzionare.
 - Se Google Sheets e configurato ma la tab richiesta manca, l'app la crea e prepara le intestazioni.
 - Se Google Sheets e configurato ma lo spreadsheet id manca o non esiste, l'app puo creare un nuovo file e deve indicare nei log il nuovo `spreadsheetId` da rendere persistente in configurazione.
-- L'utente puo esportare le spese in CSV dal tab impostazioni.
+- L'utente puo esportare il CSV corrente e il backup completo dal tab impostazioni.
+- L'utente puo ricostruire il foglio `Generale` dal tab impostazioni.
 - L'utente puo bloccare manualmente l'app dal tab impostazioni.
 - Se la classificazione AI non e attiva o fallisce, la categoria viene scelta con regole locali.
 - Se `AI_CLASSIFICATION_COMPARE=true`, il confronto locale/AI deve restare solo nei log server e non cambiare il modello dati.
@@ -435,34 +482,25 @@ La preview indica se la categoria suggerita arriva da AI o da regole locali.
 
 ## Roadmap
 
-### Versione 0.2
+### Release 1.0 corrente
 
-- Restyling frontend pulito, accattivante e futuristico.
-- Navigazione mobile a tab con `Aggiungi` e `Storico`.
-- Storico dedicato con filtri mobile-friendly.
-- Input vocale tramite Web Speech API quando disponibile.
-- Miglioramento parsing date.
-- Categorizzazione AI opzionale tramite Gemini 2.5 Flash-Lite, con fallback rule-based.
-- Cancellazione spese salvate.
-- Filtri per categoria, periodo e sorgente input.
+- PWA mobile-first con PIN personale.
+- Input testuale e vocale.
+- Parser italiano avanzato per date e importi.
+- Categorizzazione locale con Gemini opzionale.
+- Storico con filtri, refresh, modifica e cancellazione.
+- Google Sheets con archiviazione annuale automatica.
+- Foglio `Generale` ricostruibile.
+- Export CSV corrente e backup completo.
+- Test automatici su parser, storage, API, filtri, autenticazione e archiviazione.
 
-### Versione 0.3
-
-- Dashboard mensile.
-- Grafici per categoria.
-- Budget mensili.
-- Esportazione CSV.
-
-### Versione 0.4
+### Evoluzioni future
 
 - Riconoscimento spese ricorrenti.
 - Notifiche reminder.
-
-### Versione 1.0
-
 - Autenticazione.
 - Multi-device.
-- Backup cloud piu robusto.
+- Grafici e budget.
 - Possibile migrazione da Google Sheets a database.
 
 ## Regole per Nuove Istruzioni

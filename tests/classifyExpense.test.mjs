@@ -47,6 +47,14 @@ test("rule classifier returns a valid local category", () => {
   assert.equal(result.provider, "rules");
 });
 
+test("rule classifier recognizes expanded everyday keywords", () => {
+  assert.equal(classifyExpenseWithRules({ ...pizzaInput, description: "rata mutuo" }).category, "home");
+  assert.equal(classifyExpenseWithRules({ ...pizzaInput, description: "manga kagura" }).category, "entertainment");
+  assert.equal(classifyExpenseWithRules({ ...pizzaInput, description: "drink pub" }).category, "food");
+  assert.equal(classifyExpenseWithRules({ ...pizzaInput, description: "meccanico gomme" }).category, "transport");
+  assert.equal(classifyExpenseWithRules({ ...pizzaInput, description: "regalo fratello" }).category, "shopping");
+});
+
 test("main classifier falls back to rules when AI is disabled", async () => {
   resetAiEnv();
   process.env.AI_CLASSIFICATION_ENABLED = "false";

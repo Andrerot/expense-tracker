@@ -19,7 +19,7 @@ registerHooks({
   },
 });
 
-const { appendLocalExpense, deleteLocalExpense, listLocalExpenses } = await import(
+const { appendLocalExpense, deleteLocalExpense, getLocalExpense, listLocalExpenses, updateLocalExpense } = await import(
   "../src/lib/localExpenseStore.ts"
 );
 
@@ -50,6 +50,19 @@ test("deleteLocalExpense removes one expense and keeps the others", async () => 
   try {
     await appendLocalExpense(makeExpense("exp_1", "prima", "2026-05-01T10:00:00.000Z"));
     await appendLocalExpense(makeExpense("exp_2", "seconda", "2026-05-01T11:00:00.000Z"));
+
+    const existingExpense = await getLocalExpense("exp_1");
+    assert.ok(existingExpense);
+    assert.equal(existingExpense.description, "prima");
+
+    const updatedExpense = await updateLocalExpense({
+      ...existingExpense,
+      amount: 12,
+      description: "prima aggiornata",
+    });
+    assert.equal(updatedExpense.description, "prima aggiornata");
+    assert.equal(updatedExpense.amount, 12);
+    assert.equal(await updateLocalExpense(makeExpense("missing", "missing", "2026-05-01T12:00:00.000Z")), null);
 
     assert.equal(await deleteLocalExpense("exp_1"), true);
     assert.equal(await deleteLocalExpense("missing"), false);

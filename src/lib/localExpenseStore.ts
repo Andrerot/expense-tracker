@@ -36,6 +36,11 @@ export async function listLocalExpenses(limit = 50): Promise<Expense[]> {
     .slice(0, limit);
 }
 
+export async function getLocalExpense(id: string): Promise<Expense | null> {
+  const expenses = await readLocalExpenses();
+  return expenses.find((expense) => expense.id === id) ?? null;
+}
+
 export async function deleteLocalExpense(id: string): Promise<boolean> {
   const expenses = await readLocalExpenses();
   const nextExpenses = expenses.filter((expense) => expense.id !== id);
@@ -46,4 +51,18 @@ export async function deleteLocalExpense(id: string): Promise<boolean> {
 
   await writeLocalExpenses(nextExpenses);
   return true;
+}
+
+export async function updateLocalExpense(expense: Expense): Promise<Expense | null> {
+  const expenses = await readLocalExpenses();
+  const expenseIndex = expenses.findIndex((currentExpense) => currentExpense.id === expense.id);
+
+  if (expenseIndex === -1) {
+    return null;
+  }
+
+  const nextExpenses = [...expenses];
+  nextExpenses[expenseIndex] = expense;
+  await writeLocalExpenses(nextExpenses);
+  return expense;
 }

@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { ExpenseInput } from "@/components/ExpenseInput";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
+import { ExpenseEditPanel } from "@/components/ExpenseEditPanel";
 import { ExpenseList } from "@/components/ExpenseList";
 import { ExpenseReviewPanel } from "@/components/ExpenseReviewPanel";
 import { ExpenseSummary } from "@/components/ExpenseSummary";
@@ -29,16 +30,30 @@ type ExpensePreviewResponse = {
 };
 
 type StorageDiagnostics = {
+  archiveSheetCount?: number;
+  archiveSheetNames?: string[];
   checkedAt?: string;
   error?: string;
   generatedSpreadsheetId?: string;
   mode?: "google-sheets" | "local";
+  operationalSheetReady?: boolean;
   ready?: boolean;
   shareWithEmailConfigured?: boolean;
   sheetName?: string;
+  summarySheetName?: string;
+  summarySheetReady?: boolean;
   spreadsheetId?: string;
   spreadsheetIdConfigured?: boolean;
   spreadsheetTitle?: string;
+};
+
+type GeneralSummaryResponse = {
+  checkedAt?: string;
+  error?: string;
+  expenseCount?: number;
+  mode?: "google-sheets" | "local";
+  sheetName?: string;
+  yearCount?: number;
 };
 
 export function SpendinoApp() {
@@ -47,16 +62,20 @@ export function SpendinoApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingReview, setIsSavingReview] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>("add");
   const [areFiltersOpen, setAreFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<ExpenseFiltersState>(DEFAULT_EXPENSE_FILTERS);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [historyFeedback, setHistoryFeedback] = useState<Feedback>(null);
   const [pendingReview, setPendingReview] = useState<{
     expense: Expense;
     reasons: string[];
     suggestedBy: "gemini" | "rules";
   } | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const filteredExpenses = filterExpenses(expenses, filters);
   const hasActiveFilters = hasActiveExpenseFilters(filters);
   const recentExpenses = expenses.slice(0, 3);
@@ -96,15 +115,9 @@ export function SpendinoApp() {
 
     async function loadExpenses() {
       try {
-        const response = await fetch("/api/expenses", { cache: "no-store" });
-        const data = (await response.json()) as { expenses?: Expense[]; error?: string };
-
-        if (!response.ok) {
-          throw new Error(data.error ?? "Non sono riuscito a leggere le spese");
-        }
-
+        const loadedExpenses = await readExpensesFromApi();
         if (isMounted) {
-          setExpenses(data.expenses ?? []);
+          setExpenses(loadedExpenses);
         }
       } catch (error) {
         if (isMounted) {
@@ -126,6 +139,17 @@ export function SpendinoApp() {
       isMounted = false;
     };
   }, [authStatus]);
+
+  async function readExpensesFromApi(): Promise<Expense[]> {
+    const response = await fetch("/api/expenses", { cache: "no-store" });
+    const data = (await response.json()) as { expenses?: Expense[]; error?: string };
+
+    if (!response.ok) {
+      throw new Error(data.error ?? "Non sono riuscito a leggere le spese");
+    }
+
+    return data.expenses ?? [];
+  }
 
   async function handleSubmit(rawInput: string, source: ExpenseSource) {
     setIsSubmitting(true);
@@ -241,7 +265,7 @@ export function SpendinoApp() {
     }
 
     setDeletingExpenseId(expense.id);
-    setFeedback(null);
+    setHistoryFeedback(null);
 
     try {
       const response = await fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, {
@@ -254,9 +278,9 @@ export function SpendinoApp() {
       }
 
       setExpenses((current) => current.filter((currentExpense) => currentExpense.id !== expense.id));
-      setFeedback({ tone: "success", message: "Spesa cancellata" });
+      setHistoryFeedback({ tone: "success", message: "Spesa cancellata" });
     } catch (error) {
-      setFeedback({
+      setHistoryFeedback({
         tone: "error",
         message: error instanceof Error ? error.message : "Errore inatteso",
       });
@@ -265,12 +289,72 @@ export function SpendinoApp() {
     }
   }
 
+  async function handleRefreshExpenses() {
+    setIsRefreshing(true);
+    setHistoryFeedback(null);
+    setEditingExpense(null);
+
+    try {
+      const loadedExpenses = await readExpensesFromApi();
+      setExpenses(loadedExpenses);
+      setHistoryFeedback({ tone: "success", message: "Storico aggiornato" });
+    } catch (error) {
+      setHistoryFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Non sono riuscito ad aggiornare lo storico",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
+  async function handleSaveExpenseEdit(expense: Expense) {
+    setIsSavingEdit(true);
+    setHistoryFeedback(null);
+
+    try {
+      const response = await fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: expense.amount,
+          category: expense.category,
+          date: expense.date,
+          description: expense.description,
+          notes: expense.notes,
+        }),
+      });
+      const data = (await response.json()) as Expense | { error?: string };
+
+      if (!response.ok || isErrorResponse(data)) {
+        throw new Error("error" in data ? data.error : "Non sono riuscito a modificare la spesa");
+      }
+
+      setExpenses((current) =>
+        current.map((currentExpense) => (currentExpense.id === data.id ? data : currentExpense)),
+      );
+      setEditingExpense(null);
+      setHistoryFeedback({ tone: "success", message: "Spesa modificata" });
+    } catch (error) {
+      setHistoryFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Non sono riuscito a modificare la spesa",
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }
+
   async function handleLockApp() {
     await fetch("/api/auth/lock", { method: "POST" }).catch(() => undefined);
     window.localStorage.removeItem("spendino-unlocked-at");
     setExpenses([]);
     setPendingReview(null);
+    setEditingExpense(null);
     setFeedback(null);
+    setHistoryFeedback(null);
     setAuthStatus("locked");
     setActiveTab("add");
   }
@@ -357,18 +441,29 @@ export function SpendinoApp() {
                 <p className="text-sm font-bold text-slate-300">{filteredExpenses.length} spese filtrate</p>
                 <p className="mt-1 text-3xl font-black leading-none">{currencyFormatter.format(filteredTotal)}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setAreFiltersOpen((current) => !current)}
-                className="h-11 rounded-2xl bg-white px-4 text-sm font-black text-slate-950 transition active:scale-[0.98]"
-              >
-                {areFiltersOpen || hasActiveFilters ? "Filtri" : "Filtra"}
-              </button>
+              <div className="grid shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={handleRefreshExpenses}
+                  disabled={isRefreshing}
+                  className="h-10 rounded-2xl border border-cyan-200/40 bg-cyan-200 px-4 text-xs font-black text-slate-950 transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                >
+                  {isRefreshing ? "Aggiorno..." : "Aggiorna"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAreFiltersOpen((current) => !current)}
+                  className="h-10 rounded-2xl bg-white px-4 text-xs font-black text-slate-950 transition active:scale-[0.98]"
+                >
+                  {areFiltersOpen || hasActiveFilters ? "Filtri" : "Filtra"}
+                </button>
+              </div>
             </div>
             {hasActiveFilters ? (
               <p className="mt-3 text-xs font-bold text-cyan-100">Filtri attivi sullo storico</p>
             ) : null}
           </section>
+          <FeedbackMessage feedback={historyFeedback} />
 
           {areFiltersOpen || hasActiveFilters ? (
             <div className="mt-4">
@@ -400,8 +495,23 @@ export function SpendinoApp() {
               expenses={filteredExpenses}
               groupByDate
               onDeleteExpense={handleDeleteExpense}
+              onEditExpense={(expense) => {
+                setEditingExpense(expense);
+                setHistoryFeedback(null);
+              }}
             />
           </section>
+          {editingExpense ? (
+            <div className="fixed inset-x-0 bottom-[calc(92px+env(safe-area-inset-bottom))] z-20 mx-auto w-full max-w-md px-4">
+              <ExpenseEditPanel
+                key={editingExpense.id}
+                expense={editingExpense}
+                isSaving={isSavingEdit}
+                onCancel={() => setEditingExpense(null)}
+                onSave={handleSaveExpenseEdit}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         <SettingsPanel expenses={expenses} onLockApp={handleLockApp} />
@@ -435,7 +545,8 @@ function SettingsPanel({ expenses, onLockApp }: { expenses: Expense[]; onLockApp
   const [storage, setStorage] = useState<StorageDiagnostics | null>(null);
   const [settingsFeedback, setSettingsFeedback] = useState<Feedback>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingScope, setExportingScope] = useState<"current" | "all" | null>(null);
+  const [isRebuildingSummary, setIsRebuildingSummary] = useState(false);
   const localTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   useEffect(() => {
@@ -487,12 +598,12 @@ function SettingsPanel({ expenses, onLockApp }: { expenses: Expense[]; onLockApp
     }
   }
 
-  async function handleExportCsv() {
-    setIsExporting(true);
+  async function handleExportCsv(scope: "current" | "all") {
+    setExportingScope(scope);
     setSettingsFeedback(null);
 
     try {
-      const response = await fetch("/api/expenses/export", { cache: "no-store" });
+      const response = await fetch(`/api/expenses/export?scope=${scope}`, { cache: "no-store" });
 
       if (!response.ok) {
         const data = (await response.json()) as { error?: string };
@@ -503,17 +614,43 @@ function SettingsPanel({ expenses, onLockApp }: { expenses: Expense[]; onLockApp
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `spendino-expenses-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `spendino-expenses-${scope === "all" ? "complete" : "current"}-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       window.URL.revokeObjectURL(url);
-      setSettingsFeedback({ tone: "success", message: "CSV generato" });
+      setSettingsFeedback({ tone: "success", message: scope === "all" ? "Backup completo generato" : "CSV corrente generato" });
     } catch (error) {
       setSettingsFeedback({
         tone: "error",
         message: error instanceof Error ? error.message : "Export non riuscito",
       });
     } finally {
-      setIsExporting(false);
+      setExportingScope(null);
+    }
+  }
+
+  async function handleRebuildSummary() {
+    setIsRebuildingSummary(true);
+    setSettingsFeedback(null);
+
+    try {
+      const response = await fetch("/api/storage/summary", { method: "POST" });
+      const data = (await response.json()) as GeneralSummaryResponse;
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error ?? "Riepilogo non aggiornato");
+      }
+
+      setSettingsFeedback({
+        tone: "success",
+        message: `Riepilogo aggiornato: ${data.yearCount ?? 0} anni, ${data.expenseCount ?? 0} spese`,
+      });
+    } catch (error) {
+      setSettingsFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Riepilogo non aggiornato",
+      });
+    } finally {
+      setIsRebuildingSummary(false);
     }
   }
 
@@ -540,9 +677,14 @@ function SettingsPanel({ expenses, onLockApp }: { expenses: Expense[]; onLockApp
         </div>
 
         <dl className="mt-4 space-y-2 text-sm font-bold text-slate-600">
-          <InfoRow label="Tab" value={storage?.sheetName ?? "Expenses"} />
+          <InfoRow label="Tab operativo" value={storage?.sheetName ?? "Expenses"} />
           <InfoRow label="File configurato" value={storage?.spreadsheetIdConfigured ? "Si" : "No"} />
           <InfoRow label="Condivisione" value={storage?.shareWithEmailConfigured ? "Attiva" : "Non configurata"} />
+          <InfoRow label="Generale" value={storage?.summarySheetReady === false ? "Da preparare" : "Pronto"} />
+          <InfoRow label="Archivi" value={`${storage?.archiveSheetCount ?? 0} fogli`} />
+          {storage?.archiveSheetNames?.length ? (
+            <InfoRow label="Ultimo archivio" value={storage.archiveSheetNames[storage.archiveSheetNames.length - 1]} />
+          ) : null}
           {storage?.generatedSpreadsheetId ? <InfoRow label="Nuovo file" value={storage.generatedSpreadsheetId} /> : null}
           {storage?.checkedAt ? <InfoRow label="Ultimo controllo" value={formatDateTime(storage.checkedAt)} /> : null}
         </dl>
@@ -560,11 +702,27 @@ function SettingsPanel({ expenses, onLockApp }: { expenses: Expense[]; onLockApp
       <section className="mt-4 grid gap-3">
         <button
           type="button"
-          onClick={handleExportCsv}
-          disabled={isExporting}
+          onClick={() => handleExportCsv("current")}
+          disabled={exportingScope !== null}
           className="h-14 rounded-2xl border border-cyan-200 bg-white/80 px-4 text-sm font-black text-cyan-900 shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:text-slate-400"
         >
-          {isExporting ? "Esporto..." : "Esporta CSV"}
+          {exportingScope === "current" ? "Esporto..." : "Esporta CSV corrente"}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleExportCsv("all")}
+          disabled={exportingScope !== null}
+          className="h-14 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 text-sm font-black text-indigo-950 shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:text-slate-400"
+        >
+          {exportingScope === "all" ? "Preparo backup..." : "Backup CSV completo"}
+        </button>
+        <button
+          type="button"
+          onClick={handleRebuildSummary}
+          disabled={isRebuildingSummary}
+          className="h-14 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-950 shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:text-slate-400"
+        >
+          {isRebuildingSummary ? "Aggiorno riepilogo..." : "Ricostruisci Generale"}
         </button>
         <button
           type="button"

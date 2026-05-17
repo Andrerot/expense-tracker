@@ -1,6 +1,6 @@
 {
   "name": "spendino",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "scripts": {
@@ -14,8 +14,10 @@
     "test:filters": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/filterExpenses.test.mjs",
     "test:local-store": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/localExpenseStore.test.mjs",
     "test:parser": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/parseExpenseInput.test.mjs",
+    "test:archive": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expenseArchive.test.mjs",
     "test:auth": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/appAuth.test.mjs",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/parseExpenseInput.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/classifyExpense.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/localExpenseStore.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/filterExpenses.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expenseReview.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/categoryMeta.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/appAuth.test.mjs",
+    "test:api": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expensesApi.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/storageAndExportApi.test.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/parseExpenseInput.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/classifyExpense.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/localExpenseStore.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/filterExpenses.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expenseReview.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/categoryMeta.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/appAuth.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expenseArchive.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/expensesApi.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types tests/storageAndExportApi.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

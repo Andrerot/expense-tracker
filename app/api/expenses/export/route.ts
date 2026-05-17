@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listExpenses } from "@/lib/googleSheets";
+import { listAllExpenses, listExpenses } from "@/lib/googleSheets";
 import type { Expense } from "@/types/expense";
 
 export const runtime = "nodejs";
@@ -17,14 +17,17 @@ const CSV_HEADERS = [
   "notes",
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const expenses = await listExpenses(5000);
+    const url = new URL(request.url);
+    const scope = url.searchParams.get("scope") === "all" ? "all" : "current";
+    const expenses = scope === "all" ? await listAllExpenses() : await listExpenses(5000);
     const csv = toCsv(expenses);
+    const filenamePrefix = scope === "all" ? "spendino-expenses-complete" : "spendino-expenses-current";
 
     return new NextResponse(csv, {
       headers: {
-        "Content-Disposition": `attachment; filename="spendino-expenses-${new Date().toISOString().slice(0, 10)}.csv"`,
+        "Content-Disposition": `attachment; filename="${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.csv"`,
         "Content-Type": "text/csv; charset=utf-8",
       },
     });
